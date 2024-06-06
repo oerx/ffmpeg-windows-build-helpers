@@ -2351,10 +2351,10 @@ build_ffmpeg() {
 
   local postpend_configure_opts=""
   local install_prefix=""
-  # can't mix and match --enable-static --enable-shared unfortunately, or the final executable seems to just use shared if the're both present
+  # can't mix and match --enable-static --enable-shared unfortunately, or the final executable seems to just use shared if they're both present
   if [[ $build_type == "shared" ]]; then
     output_dir+="_shared"
-    install_prefix="$(pwd)/${output_dir}" # install them to their a separate dir
+    install_prefix="$(pwd)/${output_dir}" # install them to their separate dir
   else
     install_prefix="${mingw_w64_x86_64_prefix}" # don't really care since we just pluck ffmpeg.exe out of the src dir for static, but x264 pre wants it installed...
   fi
@@ -2391,126 +2391,21 @@ build_ffmpeg() {
     else
       if [[ $OSTYPE != darwin* ]]; then
         unset PKG_CONFIG_LIBDIR # just use locally packages for all the xcb stuff for now, you need to install them locally first...
-        init_options+=" --enable-libv4l2 --enable-libxcb --enable-libxcb-shm --enable-libxcb-xfixes --enable-libxcb-shape "
       fi
     fi
     if [[ `uname` =~ "5.1" ]]; then
       init_options+=" --disable-schannel"
       # Fix WinXP incompatibility by disabling Microsoft's Secure Channel, because Windows XP doesn't support TLS 1.1 and 1.2, but with GnuTLS or OpenSSL it does.  XP compat!
     fi
-    config_options="$init_options --enable-libcaca --enable-gray --enable-libtesseract --enable-fontconfig --enable-gmp --enable-libass --enable-libbluray --enable-libbs2b --enable-libflite --enable-libfreetype --enable-libfribidi --enable-libgme --enable-libgsm --enable-libilbc --enable-libmodplug --enable-libmp3lame --enable-libopencore-amrnb --enable-libopencore-amrwb --enable-libopus --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libtheora --enable-libtwolame --enable-libvo-amrwbenc --enable-libvorbis --enable-libwebp --enable-libzimg --enable-libzvbi --enable-libmysofa --enable-libopenjpeg  --enable-libopenh264  --enable-libvmaf --enable-libsrt --enable-libxml2 --enable-opengl --enable-libdav1d --enable-gnutls"
+    config_options="$init_options --enable-avcodec --enable-avformat --enable-avutil --enable-avfilter --enable-avdevice --enable-swresample --enable-swscale --disable-programs --disable-doc --disable-avresample"
 
-    if [[ "$bits_target" != "32" ]]; then
-      if [[ $build_svt_hevc = y ]]; then
-        # SVT-HEVC
-        # Apply the correct patches based on version. Logic (n4.4 patch for n4.2, n4.3 and n4.4)  based on patch notes here:
-        # https://github.com/OpenVisualCloud/SVT-HEVC/commit/b5587b09f44bcae70676f14d3bc482e27f07b773#diff-2b35e92117ba43f8397c2036658784ba2059df128c9b8a2625d42bc527dffea1
-        if [[ $ffmpeg_git_checkout_version == *"n4.4"* ]] || [[ $ffmpeg_git_checkout_version == *"n4.3"* ]] || [[ $ffmpeg_git_checkout_version == *"n4.2"* ]]; then
-          git apply "$work_dir/SVT-HEVC_git/ffmpeg_plugin/n4.4-0001-lavc-svt_hevc-add-libsvt-hevc-encoder-wrapper.patch"
-          git apply "$patch_dir/SVT-HEVC-0002-doc-Add-libsvt_hevc-encoder-docs.patch"  # upstream patch does not apply on current ffmpeg master
-        elif [[ $ffmpeg_git_checkout_version == *"n4.1"* ]] || [[ $ffmpeg_git_checkout_version == *"n3.4"* ]] || [[ $ffmpeg_git_checkout_version == *"n3.2"* ]] || [[ $ffmpeg_git_checkout_version == *"n2.8"* ]]; then
-          : # too old...
-        else
-          # newer:
-          git apply "$work_dir/SVT-HEVC_git/ffmpeg_plugin/master-0001-lavc-svt_hevc-add-libsvt-hevc-encoder-wrapper.patch"
-        fi
-        config_options+=" --enable-libsvthevc"
-      fi
-      if [[ $build_svt_vp9 = y ]]; then
-        # SVT-VP9
-        # Apply the correct patches based on version. Logic (n4.4 patch for n4.2, n4.3 and n4.4)  based on patch notes here:
-        # https://github.com/OpenVisualCloud/SVT-VP9/tree/master/ffmpeg_plugin
-        if [[ $ffmpeg_git_checkout_version == *"n4.3.1"* ]]; then
-          git apply "$work_dir/SVT-VP9_git/ffmpeg_plugin/n4.3.1-0001-Add-ability-for-ffmpeg-to-run-svt-vp9.patch"
-        elif [[ $ffmpeg_git_checkout_version == *"n4.2.3"* ]]; then
-          git apply "$work_dir/SVT-VP9_git/ffmpeg_plugin/n4.2.3-0001-Add-ability-for-ffmpeg-to-run-svt-vp9.patch"
-        elif [[ $ffmpeg_git_checkout_version == *"n4.2.2"* ]]; then
-          git apply "$work_dir/SVT-VP9_git/ffmpeg_plugin/0001-Add-ability-for-ffmpeg-to-run-svt-vp9.patch"
-        else 
-          # newer:
-          git apply "$work_dir/SVT-VP9_git/ffmpeg_plugin/master-0001-Add-ability-for-ffmpeg-to-run-svt-vp9.patch"
-        fi
-		config_options+=" --enable-libsvtvp9"
-      fi
-      config_options+=" --enable-libsvtav1"
-    fi # else doesn't work/matter with 32 bit
-    config_options+=" --enable-libvpx"
-    config_options+=" --enable-libaom"
-
-    if [[ $compiler_flavors != "native" ]]; then
-      config_options+=" --enable-nvenc --enable-nvdec" # don't work OS X
-    fi
-
-    # the order of extra-libs switches is important (appended in reverse)
-    config_options+=" --extra-libs=-lz"
-    config_options+=" --extra-libs=-lpng"
-    config_options+=" --extra-libs=-lm" # libflite seemed to need this linux native...and have no .pc file huh?
-    config_options+=" --extra-libs=-lfreetype"
-
-    if [[ $compiler_flavors != "native" ]]; then
-      config_options+=" --extra-libs=-lshlwapi" # lame needed this, no .pc file?
-    fi
-    config_options+=" --extra-libs=-lmpg123" # ditto
-    config_options+=" --extra-libs=-lpthread" # for some reason various and sundry needed this linux native
-
-    config_options+=" --extra-cflags=-DLIBTWOLAME_STATIC --extra-cflags=-DMODPLUG_STATIC --extra-cflags=-DCACA_STATIC" # if we ever do a git pull then it nukes changes, which overrides manual changes to configure, so just use these for now :|
-    if [[ $build_amd_amf = n ]]; then
-      config_options+=" --disable-amf" # Since its autodetected we have to disable it if we do not want it. #unless we define no autodetection but.. we don't.
-    else
-      config_options+=" --enable-amf" # This is actually autodetected but for consistency.. we might as well set it.
-    fi
-
-    if [[ $build_intel_qsv = y && $compiler_flavors != "native" ]]; then # Broken for native builds right now: https://github.com/lu-zero/mfx_dispatch/issues/71
-      config_options+=" --enable-libmfx"
-    else
-      config_options+=" --disable-libmfx"
-    fi
-    
-    if [[ $ffmpeg_git_checkout_version != *"n6.0"* ]] && [[ $ffmpeg_git_checkout_version != *"n5.1"* ]] && [[ $ffmpeg_git_checkout_version != *"n5.0"* ]] && [[ $ffmpeg_git_checkout_version != *"n4.4"* ]] && [[ $ffmpeg_git_checkout_version != *"n4.3"* ]] && [[ $ffmpeg_git_checkout_version != *"n4.2"* ]] && [[ $ffmpeg_git_checkout_version != *"n4.1"* ]] && [[ $ffmpeg_git_checkout_version != *"n3.4"* ]] && [[ $ffmpeg_git_checkout_version != *"n3.2"* ]] && [[ $ffmpeg_git_checkout_version != *"n2.8"* ]]; then
-      # Disable libaribcatption on old versions
-      config_options+=" --enable-libaribcaption" # libaribcatption (MIT licensed)
-    fi
-    
-    if [[ $enable_gpl == 'y' ]]; then
-      config_options+=" --enable-gpl --enable-frei0r --enable-librubberband --enable-libvidstab --enable-libx264 --enable-libx265 --enable-avisynth --enable-libaribb24"
-      config_options+=" --enable-libxvid --enable-libdavs2"
-      if [[ $host_target != 'i686-w64-mingw32' ]]; then
-        config_options+=" --enable-libxavs2"
-      fi
-      if [[ $compiler_flavors != "native" ]]; then
-        config_options+=" --enable-libxavs" # don't compile OS X
-      fi
-    fi
-    local licensed_gpl=n # lgpl build with libx264 included for those with "commercial" license :)
-    if [[ $licensed_gpl == 'y' ]]; then
-      apply_patch file://$patch_dir/x264_non_gpl.diff -p1
-      config_options+=" --enable-libx264"
-    fi
-    # other possibilities:
-    #   --enable-w32threads # [worse UDP than pthreads, so not using that]
+    # Append other options if needed
+    config_options+=" $postpend_configure_opts"
 
     for i in $CFLAGS; do
       config_options+=" --extra-cflags=$i" # --extra-cflags may not be needed here, but adds it to the final console output which I like for debugging purposes
     done
 
-    config_options+=" $postpend_configure_opts"
-
-    if [[ "$non_free" = "y" ]]; then
-      config_options+=" --enable-nonfree --enable-libfdk-aac"
-
-      if [[ $compiler_flavors != "native" ]]; then
-        config_options+=" --enable-decklink" # Error finding rpc.h in native builds even if it's available
-      fi
-      # other possible options: --enable-openssl [unneeded since we already use gnutls]
-    fi
-
-    do_debug_build=n # if you need one for backtraces/examining segfaults using gdb.exe ... change this to y :) XXXX make it affect x264 too...and make it real param :)
-    if [[ "$do_debug_build" = "y" ]]; then
-      # not sure how many of these are actually needed/useful...possibly none LOL
-      config_options+=" --disable-optimizations --extra-cflags=-Og --extra-cflags=-fno-omit-frame-pointer --enable-debug=3 --extra-cflags=-fno-inline $postpend_configure_opts"
-      # this one kills gdb workability for static build? ai ai [?] XXXX
-      config_options+=" --disable-libgme"
-    fi
     config_options+=" $extra_postpend_configure_options"
 
     do_configure "$config_options"
@@ -2520,14 +2415,9 @@ build_ffmpeg() {
 
     do_make_and_make_install # install ffmpeg as well (for shared, to separate out the .dll's, for things that depend on it like VLC, to create static libs)
 
-    # build ismindex.exe, too, just for fun
-    if [[ $build_ismindex == "y" ]]; then
-      make tools/ismindex.exe || exit 1
-    fi
-
     # XXX really ffmpeg should have set this up right but doesn't, patch FFmpeg itself instead...
     if [[ $1 == "static" ]]; then
-     # nb we can just modify this every time, it getes recreated, above..
+      # nb we can just modify this every time, it gets recreated, above..
       if [[ $build_intel_qsv = y  && $compiler_flavors != "native" ]]; then # Broken for native builds right now: https://github.com/lu-zero/mfx_dispatch/issues/71
         sed -i.bak 's/-lavutil -pthread -lm /-lavutil -pthread -lm -lmfx -lstdc++ -lmpg123 -lshlwapi /' "$PKG_CONFIG_PATH/libavutil.pc"
       else
@@ -2579,6 +2469,7 @@ build_ffmpeg() {
     cd "$work_dir"
   fi
 }
+
 
 build_lsw() {
    # Build L-Smash-Works, which are AviSynth plugins based on lsmash/ffmpeg
